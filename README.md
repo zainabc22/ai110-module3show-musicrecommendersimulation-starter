@@ -11,23 +11,57 @@ Your goal is to:
 - Evaluate what your system gets right and wrong
 - Reflect on how this mirrors real world AI recommenders
 
-Replace this paragraph with your own summary of what your version does.
+This simulation builds a content-based music recommender that scores songs by comparing their audio attributes — genre, mood, energy, and acousticness — against a user's stored taste profile. Rather than learning from what other users listen to, it focuses entirely on the properties of the songs themselves and how closely they match what a single user has told the system they prefer.
 
 ---
 
 ## How The System Works
 
-Explain your design in plain language.
+Real-world recommenders like Spotify and YouTube use two main strategies. Collaborative filtering finds users with similar listening histories and recommends what those users loved. Content-based filtering ignores other users entirely and instead analyzes the properties of the songs themselves — things like energy, tempo, and mood — to find tracks that resemble what you already enjoy. This simulation uses the content-based approach. Rather than requiring a large pool of user behavior data, it works by scoring each song in the catalog against a single user's stated preferences and returning the closest matches. The system prioritizes genre and mood as the strongest identity signals, uses energy as a continuous proximity measure, and factors in acoustic preference as a stated listener trait. It deliberately keeps the scoring transparent and explainable — every recommendation comes with a plain-language reason — because in a simple simulation, interpretability matters more than the complexity of the model.
 
-Some prompts to answer:
+### `Song` Features
 
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
+Each song in the catalog is described by the following attributes:
 
-You can include a simple diagram or bullet list if helpful.
+| Feature | Type | Description |
+|---|---|---|
+| `id` | Integer | Unique identifier |
+| `title` | String | Song title |
+| `artist` | String | Artist name |
+| `genre` | String | Broad genre label (e.g. lofi, rock, jazz) |
+| `mood` | String | Emotional tone (e.g. chill, intense, happy, focused) |
+| `energy` | Float 0–1 | Overall intensity and activity level |
+| `tempo_bpm` | Float | Beats per minute |
+| `valence` | Float 0–1 | Musical positivity (0 = dark, 1 = uplifting) |
+| `danceability` | Float 0–1 | How suitable the track is for dancing |
+| `acousticness` | Float 0–1 | How acoustic vs. electronic the track sounds |
+
+The four features actively used in scoring are `genre`, `mood`, `energy`, and `acousticness`. The remaining features (`tempo_bpm`, `valence`, `danceability`) are stored on the object and available for future experiments.
+
+### `UserProfile` Fields
+
+The user's taste profile stores four pieces of preference data that map directly to the scored song features:
+
+| Field | Type | Maps To |
+|---|---|---|
+| `favorite_genre` | String | `song.genre` — exact match check |
+| `favorite_mood` | String | `song.mood` — exact match check |
+| `target_energy` | Float 0–1 | `song.energy` — proximity score |
+| `likes_acoustic` | Boolean | `song.acousticness` — threshold check at 0.5 |
+
+### Scoring Logic
+
+Each song receives a score between `0.0` and `1.0` built from four weighted rules:
+
+```
+genre match      → +0.30 if song.genre == user.favorite_genre
+mood match       → +0.25 if song.mood == user.favorite_mood
+energy proximity → +0.25 × max(0, 1 - |song.energy - user.target_energy|)
+acoustic match   → +0.20 if likes_acoustic and acousticness ≥ 0.5
+                        or not likes_acoustic and acousticness < 0.5
+```
+
+Songs are ranked by total score and the top `k` are returned. Every contributing rule adds a plain-language reason string so the recommendation can be explained to the user.
 
 ---
 
