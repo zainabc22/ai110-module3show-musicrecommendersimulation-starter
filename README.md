@@ -49,19 +49,34 @@ The user's taste profile stores four pieces of preference data that map directly
 | `target_energy` | Float 0–1 | `song.energy` — proximity score |
 | `likes_acoustic` | Boolean | `song.acousticness` — threshold check at 0.5 |
 
-### Scoring Logic
+### Scoring Logic (Algorithm Recipe)
 
-Each song receives a score between `0.0` and `1.0` built from four weighted rules:
+Each song is scored by calling `score_song(user_prefs, song)`, which applies three weighted rules and returns a `(score, reasons)` tuple. Scores are unbounded — a perfect match earns **4.0 points**.
 
 ```
-genre match      → +0.30 if song.genre == user.favorite_genre
-mood match       → +0.25 if song.mood == user.favorite_mood
-energy proximity → +0.25 × max(0, 1 - |song.energy - user.target_energy|)
-acoustic match   → +0.20 if likes_acoustic and acousticness ≥ 0.5
-                        or not likes_acoustic and acousticness < 0.5
+genre match        → +2.0  if song.genre == user.favorite_genre  (case-insensitive)
+mood match         → +1.0  if song.mood  == user.favorite_mood   (case-insensitive)
+energy similarity  → +0.0 to +1.0  calculated as:
+                       1.0 - |song.energy - user.target_energy|
+                       (1.0 = perfect match, 0.0 = opposite ends of the scale)
 ```
 
-Songs are ranked by total score and the top `k` are returned. Every contributing rule adds a plain-language reason string so the recommendation can be explained to the user.
+**Example** — user profile: `lofi / chill / energy=0.4`
+
+| Song | Genre | Mood | Energy | Score |
+|---|---|---|---|---|
+| Midnight Coding | lofi ✓ | chill ✓ | 0.42 | 2.0 + 1.0 + 0.98 = **3.98** |
+| Library Rain | lofi ✓ | chill ✓ | 0.35 | 2.0 + 1.0 + 0.95 = **3.95** |
+| Sunrise City | pop | happy | 0.82 | 0 + 0 + 0.58 = **0.58** |
+
+Songs are ranked by total score and the top `k` are returned. Every rule that contributes points appends a plain-language reason string, so every recommendation can be explained to the user.
+
+### Expected Biases
+
+- **Genre dominates.** A genre match (+2.0) is worth twice a mood match (+1.0) and more than a perfect energy score (+1.0). A song that matches genre but feels nothing like the user's mood will still rank above a song that nails mood and energy but belongs to the wrong genre. Great cross-genre discoveries will be systematically buried.
+- **Mood is binary.** There is no partial credit for "close" moods — a `chill` user gets 0 points from a `relaxed` or `peaceful` song even though they are emotionally adjacent. This makes the system brittle to mood label variety.
+- **Energy similarity can mask bad fits.** A song with matching energy but completely wrong genre and mood still earns up to 1.0 point, which may push it into the top-K ahead of a thematically appropriate but slightly off-energy track.
+- **Three features ignore six others.** `tempo_bpm`, `valence`, `danceability`, and `acousticness` are stored on every song but unused in scoring. Two songs that score identically may feel very different to a listener because of these ignored dimensions.
 
 ---
 
